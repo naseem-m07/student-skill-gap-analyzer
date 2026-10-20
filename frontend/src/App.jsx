@@ -1,7 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 
-const API = "http://127.0.0.1:8002";
+const API = "http://127.0.0.1:8003";
 
 const careerSkills = {
   "Cloud Engineer": ["Python", "Linux", "Networking", "AWS", "Git", "Docker"],

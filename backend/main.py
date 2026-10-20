@@ -2,24 +2,48 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+
 from auth import router as auth_router
-from database import get_connection
+from database import get_connection, create_tables
 from security import verify_access_token
+
+from contextlib import asynccontextmanager
 import json
+import os
+
+
+# =====================================
+# DATABASE INITIALIZATION
+# =====================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_tables()
+    yield
 
 
 # =====================================
 # FASTAPI APPLICATION
 # =====================================
 
-app = FastAPI(title="Student Skill Gap Analyzer API")
+app = FastAPI(
+    title="Student Skill Gap Analyzer API",
+    lifespan=lifespan
+)
+
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+]
+
+frontend_url = os.getenv("FRONTEND_URL")
+
+if frontend_url:
+    allowed_origins.append(frontend_url.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -205,7 +229,7 @@ def save_analysis(
         cursor = connection.cursor()
 
         cursor.execute(
-            "SELECT id FROM students WHERE id = ?",
+            "SELECT id FROM students WHERE id = %s",
             (logged_in_id,)
         )
 
@@ -222,7 +246,7 @@ def save_analysis(
             INSERT INTO skill_analysis
             (student_id, career, selected_skills,
              missing_skills, percentage)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (
                 logged_in_id,
@@ -267,7 +291,7 @@ def get_analysis_history(
             SELECT id, career, selected_skills,
                    missing_skills, percentage, analyzed_at
             FROM skill_analysis
-            WHERE student_id = ?
+            WHERE student_id = %s
             ORDER BY analyzed_at DESC, id DESC
             """,
             (logged_in_id,)
@@ -327,7 +351,7 @@ def save_learning_progress(
         cursor = connection.cursor()
 
         cursor.execute(
-            "SELECT id FROM students WHERE id = ?",
+            "SELECT id FROM students WHERE id = %s",
             (logged_in_id,)
         )
 
@@ -340,7 +364,7 @@ def save_learning_progress(
         cursor.execute(
             """
             SELECT id FROM learning_progress
-            WHERE student_id = ? AND skill = ?
+            WHERE student_id = %s AND skill = %s
             """,
             (logged_in_id, request.skill)
         )
@@ -351,8 +375,8 @@ def save_learning_progress(
             cursor.execute(
                 """
                 UPDATE learning_progress
-                SET status = ?
-                WHERE student_id = ? AND skill = ?
+                SET status = %s
+                WHERE student_id = %s AND skill = %s
                 """,
                 (
                     request.status,
@@ -365,7 +389,7 @@ def save_learning_progress(
                 """
                 INSERT INTO learning_progress
                 (student_id, skill, status)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
                 """,
                 (
                     logged_in_id,
@@ -407,7 +431,7 @@ def get_learning_progress(
             """
             SELECT skill, status
             FROM learning_progress
-            WHERE student_id = ?
+            WHERE student_id = %s
             ORDER BY id DESC
             """,
             (logged_in_id,)

@@ -1,7 +1,6 @@
-import sqlite3
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from psycopg.errors import UniqueViolation
 
 from database import get_connection
 from security import (
@@ -74,20 +73,23 @@ def register_student(student: RegisterRequest):
         cursor.execute(
             """
             INSERT INTO students (name, email, password)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
+            RETURNING id
             """,
             (name, email, hashed_password)
         )
 
+        new_student = cursor.fetchone()
         connection.commit()
 
         return {
             "message": "Registration successful!",
-            "student_id": cursor.lastrowid,
+            "student_id": new_student["id"],
             "name": name
         }
 
-    except sqlite3.IntegrityError:
+    except UniqueViolation:
+        connection.rollback()
         raise HTTPException(
             status_code=400,
             detail="Email already registered"
@@ -115,7 +117,7 @@ def login_student(student: LoginRequest):
             """
             SELECT id, name, email, password
             FROM students
-            WHERE email = ?
+            WHERE email = %s
             """,
             (email,)
         )
@@ -140,7 +142,6 @@ def login_student(student: LoginRequest):
             detail="Invalid email or password"
         )
 
-    # Generate JWT token after successful login
     access_token = create_access_token(user["id"])
 
     return {
